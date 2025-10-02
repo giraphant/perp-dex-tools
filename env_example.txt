@@ -35,18 +35,25 @@ LIGHTER_ACCOUNT_INDEX=0
 LIGHTER_API_KEY_INDEX=0
 
 # Notification (optional)
-# guide: https://www.feishu.cn/hc/zh-CN/articles/185289387886-%E6%B6%88%E6%81%AF%E5%8A%A9%E6%89%8B-%E6%9C%BA%E5%99%A8%E4%BA%BA
+# Lark notification guide: https://www.feishu.cn/hc/zh-CN/articles/185289387886-%E6%B6%88%E6%81%AF%E5%8A%A9%E6%89%8B-%E6%9C%BA%E5%99%A8%E4%BA%BA
 LARK_TOKEN=
 
+# Telegram notification (optional)
+# Setup guide: see docs/telegram-bot-setup.md
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
+
+# Pushover notification (optional)
+# Get your token and user key from https://pushover.net/
+PUSHOVER_TOKEN=
+PUSHOVER_USER_KEY=
 
 # Logging
 LOG_TO_CONSOLE=true
 LOG_TO_FILE=true
 LOG_FILE=trading_log.csv
 
-TIMEZONE=Asia/Shanghai
+TIMEZONE=Europe/London
 
 # EdgeX API Endpoints
 EDGEX_BASE_URL=https://pro.edgex.exchange

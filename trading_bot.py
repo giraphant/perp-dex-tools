@@ -9,11 +9,14 @@ import traceback
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional
+from datetime import datetime
+import pytz
 
 from exchanges import ExchangeFactory
 from helpers import TradingLogger
 from helpers.lark_bot import LarkBot
 from helpers.telegram_bot import TelegramBot
+from helpers.pushover_bot import PushoverBot
 
 
 @dataclass
@@ -89,6 +92,13 @@ class TradingBot:
         """Perform graceful shutdown of the trading bot."""
         self.logger.log(f"Starting graceful shutdown: {reason}", "INFO")
         self.shutdown_requested = True
+
+        # Send shutdown notification
+        shutdown_message = f"Trading Bot Stopped\n\nReason: {reason}\nTime: {self._get_current_time()}\nExchange: {self.config.exchange}\nTicker: {self.config.ticker}"
+        try:
+            await self._send_notifications(shutdown_message, "Bot Shutdown Alert", priority=1)
+        except Exception as e:
+            self.logger.log(f"Failed to send shutdown notification: {e}", "ERROR")
 
         try:
             # Disconnect from exchange
@@ -405,7 +415,7 @@ class TradingBot:
                     error_message += "###### ERROR ###### ERROR ###### ERROR ###### ERROR #####\n"
                     self.logger.log(error_message, "ERROR")
 
-                    await self.send_notification(error_message.lstrip())
+                    await self._send_notifications(error_message.lstrip(), "Trading Error", priority=1)
 
                     if not self.shutdown_requested:
                         self.shutdown_requested = True
@@ -478,17 +488,36 @@ class TradingBot:
 
         return stop_trading, pause_trading
 
-    async def send_notification(self, message: str):
+    def _get_current_time(self) -> str:
+        """Get current time in configured timezone"""
+        timezone = pytz.timezone(os.getenv('TIMEZONE', 'Europe/London'))
+        return datetime.now(timezone).strftime('%Y-%m-%d %H:%M:%S %Z')
+
+    async def send_notification(self, message: str, title: str = "Trading Bot Alert", priority: int = 1):
+        """Send notifications via all configured services (Lark, Telegram, Pushover)"""
+        # Send via Lark
         lark_token = os.getenv("LARK_TOKEN")
         if lark_token:
             async with LarkBot(lark_token) as lark_bot:
                 await lark_bot.send_text(message)
 
+        # Send via Telegram
         telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
         telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
         if telegram_token and telegram_chat_id:
             with TelegramBot(telegram_token, telegram_chat_id) as tg_bot:
                 tg_bot.send_text(message)
+
+        # Send via Pushover
+        pushover_token = os.getenv("PUSHOVER_TOKEN")
+        pushover_user = os.getenv("PUSHOVER_USER_KEY")
+        if pushover_token and pushover_user:
+            async with PushoverBot(pushover_token, pushover_user) as bot:
+                await bot.send_message(message, title, priority)
+
+    async def _send_notifications(self, message: str, title: str = "Trading Bot Alert", priority: int = 1):
+        """Alias for send_notification for backward compatibility"""
+        await self.send_notification(message, title, priority)
 
     async def run(self):
         """Main trading loop."""
@@ -510,6 +539,13 @@ class TradingBot:
             self.logger.log(f"Pause Price: {self.config.pause_price}", "INFO")
             self.logger.log(f"Aster Boost: {self.config.aster_boost}", "INFO")
             self.logger.log("=============================", "INFO")
+
+            # Send startup notification
+            startup_message = f"Trading Bot Started\n\nExchange: {self.config.exchange}\nTicker: {self.config.ticker}\nQuantity: {self.config.quantity}\nTake Profit: {self.config.take_profit}%\nDirection: {self.config.direction}\nMax Orders: {self.config.max_orders}\nTime: {self._get_current_time()}"
+            try:
+                await self._send_notifications(startup_message, "Bot Started", priority=0)
+            except Exception as e:
+                self.logger.log(f"Failed to send startup notification: {e}", "ERROR")
 
             # Capture the running event loop for thread-safe callbacks
             self.loop = asyncio.get_running_loop()
@@ -542,7 +578,7 @@ class TradingBot:
                     msg = f"\n\nWARNING: [{self.config.exchange.upper()}_{self.config.ticker.upper()}] \n"
                     msg += "Stopped trading due to stop price triggered\n"
                     msg += "价格已经达到停止交易价格，脚本将停止交易\n"
-                    await self.send_notification(msg.lstrip())
+                    await self.send_notification(msg.lstrip(), "Trading Alert", priority=1)
                     await self.graceful_shutdown(msg)
                     continue
 
